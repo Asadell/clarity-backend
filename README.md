@@ -1,4 +1,4 @@
-# Clarity Couple Backend
+# Clarity Couple Backend.
 
 Backend API for Clarity Couple, powered by FastAPI and Gemini 3.0 Flash.
 
