@@ -10,71 +10,83 @@ from ..services.analysis_service import AnalysisService
 logger = get_logger(__name__)
 
 class SpecializedModelManager:
-    def __init__(self, api_keys: List[str], function_name: str, need_chat_model: bool = False):
+    def __init__(self, api_keys: List[str], function_name: str, model_name: str = None):
         self.api_keys = api_keys
         self.function_name = function_name
-        self.need_chat_model = need_chat_model
-        # Store clients instead of global config
-        self.clients = []
+        self.model_name = model_name  # e.g., 'gemini-3-flash-preview' or None for embedding
+        self.models = []  # Store pre-initialized model instances
         self.current_index = 0
         
-        self._initialize_clients()
+        self._initialize_models()
         
-    def _initialize_clients(self):
-        valid_clients = []
-        logger.info(f"Initializing {len(self.api_keys)} keys for {self.function_name}...")
+    def _initialize_models(self):
+        """Pre-initialize all models with their respective API keys at startup"""
+        logger.info(f"Pre-initializing {len(self.api_keys)} models for {self.function_name}...")
         
         for i, key in enumerate(self.api_keys):
             try:
-                # Assuming genai.configure is not needed if we use specific methods or if we implement a wrapper that sets it.
-                # However, the standard google-generativeai lib uses global config for 'genai.GenerativeModel'.
-                # For safety with multi-key, we might need a wrapper or just simple string keys if we configure just-in-time.
-                # BUT, better approach with this lib version: Just store the keys and configure in the execute method.
-                # Or create GenerativeModel objects which might bind to the key at creation? 
-                # BUT, better approach with this lib version: Just store the keys and rotate them.
-                
-                # Simple validation call
+                # Configure genai with this specific key
                 genai.configure(api_key=key)
-                if self.need_chat_model:
-                     model = genai.GenerativeModel('gemini-3-flash-preview') 
-                     # User explicitly requested Gemini 3 preview model.
-                     pass
-                     
-                valid_clients.append(key)
-                # logger.info(f"Key {i+1} valid for {self.function_name}")
+                
+                # Create model instance if needed (for chat/analysis)
+                if self.model_name:
+                    model = genai.GenerativeModel(self.model_name)
+                    self.models.append({
+                        'key': key,
+                        'model': model,
+                        'key_suffix': key[-4:]
+                    })
+                else:
+                    # For embedding, just store the key (embedding uses genai.embed_content)
+                    self.models.append({
+                        'key': key,
+                        'model': None,
+                        'key_suffix': key[-4:]
+                    })
+                    
+                logger.info(f"✓ Model {i+1}/{len(self.api_keys)} initialized for {self.function_name}")
             except Exception as e:
-                logger.error(f"Key {i+1} failed for {self.function_name}: {e}")
+                logger.error(f"✗ Model {i+1} failed for {self.function_name}: {e}")
         
-        self.api_keys = valid_clients
-        if not self.api_keys:
-            logger.warning(f"No valid keys for {self.function_name}!")
+        if not self.models:
+            logger.warning(f"No valid models initialized for {self.function_name}!")
 
-    def get_next_key(self) -> str:
-        if not self.api_keys:
-            raise ValueError(f"No available API keys for {self.function_name}")
+    def get_next_model(self):
+        """Get next pre-initialized model in rotation"""
+        if not self.models:
+            raise ValueError(f"No available models for {self.function_name}")
             
-        key = self.api_keys[self.current_index]
-        self.current_index = (self.current_index + 1) % len(self.api_keys)
-        return key
+        model_config = self.models[self.current_index]
+        self.current_index = (self.current_index + 1) % len(self.models)
+        return model_config
         
     def execute_with_fallback(self, func):
         """
-        Execute a function with round-robin key selection and retries.
-        func should be a callable that takes an api_key argument.
+        Execute a function with pre-initialized model rotation.
+        func should accept a model_config dict with 'key' and 'model' fields.
+        
+        When a 429 quota exceeded error occurs, immediately switch to the next pre-initialized model.
         """
         attempts = 0
-        max_attempts = len(self.api_keys)
+        max_attempts = len(self.models)
         
         while attempts < max_attempts:
-            key = self.get_next_key()
+            model_config = self.get_next_model()
             try:
-                genai.configure(api_key=key)
-                return func()
+                # Configure genai with the key (needed for embedding and other operations)
+                genai.configure(api_key=model_config['key'])
+                # Pass the pre-initialized model to the function
+                return func(model_config)
+            except google_exceptions.ResourceExhausted as e:
+                # 429 Quota Exceeded - immediately try next model
+                logger.warning(f"{self.function_name} quota exceeded with key ...{model_config['key_suffix']}")
+                attempts += 1
+                continue
             except Exception as e:
-                logger.warning(f"{self.function_name} failed with key ...{key[-4:]}: {e}")
+                logger.warning(f"{self.function_name} failed with key ...{model_config['key_suffix']}: {e}")
                 attempts += 1
         
-        raise RuntimeError(f"All keys failed for {self.function_name}")
+        raise RuntimeError(f"All models failed for {self.function_name}")
 
 
 class DIContainer:
@@ -90,16 +102,30 @@ class DIContainer:
     def init_services(self):
         logger.info("Initializing services...")
         
-        # Initialize specialized managers
-        # Gemini 3.0 Flash logic: User requested Gemini 3.
-        # We will use 'gemini-2.0-flash-exp' or 'gemini-1.5-flash' if 3 is not resolveable, 
-        # BUT the plan is to use 'gemini-3-flash' or 'gemini-3.0-flash-preview'.
-        # We will use 'models/text-embedding-004' for embeddings.
+        # Initialize specialized managers with model names
+        # Embedding managers don't need model_name (they use genai.embed_content directly)
+        query_emb_manager = SpecializedModelManager(
+            settings.QUERY_EMBEDDING_KEYS, 
+            "QueryEmbedding",
+            model_name=None
+        )
+        batch_emb_manager = SpecializedModelManager(
+            settings.BATCH_EMBEDDING_KEYS, 
+            "BatchEmbedding",
+            model_name=None
+        )
         
-        query_emb_manager = SpecializedModelManager(settings.QUERY_EMBEDDING_KEYS, "QueryEmbedding")
-        batch_emb_manager = SpecializedModelManager(settings.BATCH_EMBEDDING_KEYS, "BatchEmbedding")
-        chat_response_manager = SpecializedModelManager(settings.CHAT_RESPONSE_KEYS, "ChatResponse", need_chat_model=True)
-        analysis_manager = SpecializedModelManager(settings.ANALYSIS_KEYS, "Analysis", need_chat_model=True)
+        # Chat and Analysis managers need GenerativeModel instances
+        chat_response_manager = SpecializedModelManager(
+            settings.CHAT_RESPONSE_KEYS, 
+            "ChatResponse",
+            model_name='gemini-3-flash-preview'
+        )
+        analysis_manager = SpecializedModelManager(
+            settings.ANALYSIS_KEYS, 
+            "Analysis",
+            model_name='gemini-3-flash-preview'
+        )
         
         self.register("query_emb_manager", query_emb_manager)
         self.register("batch_emb_manager", batch_emb_manager)

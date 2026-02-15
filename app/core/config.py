@@ -65,21 +65,46 @@ class Settings(BaseSettings):
                 keys.append(key)
         return keys
 
+    def _get_keys_for_group(self, group_idx: int) -> List[str]:
+        """
+        group_idx: 0=Query, 1=Batch, 2=Chat, 3=Analysis
+        """
+        all_keys = self.ALL_GEMINI_KEYS
+        if not all_keys:
+            return []
+        
+        # If we have 40 or more keys, use the legacy slicing
+        if len(all_keys) >= 40:
+            start = group_idx * 10
+            return all_keys[start : start + 10]
+        
+        # If we have very few keys (less than 4), share all of them with everyone
+        # to ensure every service has at least one key.
+        if len(all_keys) < 4:
+            return all_keys
+            
+        # Otherwise, partition them as fairly as possible
+        part_size = len(all_keys) // 4
+        start = group_idx * part_size
+        # Last group gets the remainder
+        end = (group_idx + 1) * part_size if group_idx < 3 else len(all_keys)
+        return all_keys[start:end]
+
     @property
     def QUERY_EMBEDDING_KEYS(self) -> List[str]:
-        return self.ALL_GEMINI_KEYS[0:10] if len(self.ALL_GEMINI_KEYS) >= 10 else []
+        return self._get_keys_for_group(0)
 
     @property
     def BATCH_EMBEDDING_KEYS(self) -> List[str]:
-        return self.ALL_GEMINI_KEYS[10:20] if len(self.ALL_GEMINI_KEYS) >= 20 else []
+        return self._get_keys_for_group(1)
 
     @property
     def CHAT_RESPONSE_KEYS(self) -> List[str]:
-        return self.ALL_GEMINI_KEYS[20:30] if len(self.ALL_GEMINI_KEYS) >= 30 else []
+        return self._get_keys_for_group(2)
 
     @property
     def ANALYSIS_KEYS(self) -> List[str]:
-        return self.ALL_GEMINI_KEYS[30:40] if len(self.ALL_GEMINI_KEYS) >= 40 else []
+        return self._get_keys_for_group(3)
 
     class Config:
         env_file = ".env"

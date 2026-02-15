@@ -33,3 +33,8 @@ async def answer_question(request: AnalysisRequest, db: AsyncSession = Depends(g
         raise HTTPException(status_code=400, detail="Question is required for this mode")
     service = container.get("analysis_service")
     return await service.answer_question(db, request.user_uuid, request.contact_id, request.question)
+
+@router.post("/analysis/key-questions")
+async def generate_key_questions(request: AnalysisRequest, db: AsyncSession = Depends(get_db)):
+    service = container.get("analysis_service")
+    return await service.generate_key_questions(db, request.user_uuid, request.contact_id)

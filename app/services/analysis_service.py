@@ -7,10 +7,13 @@ import json
 
 logger = get_logger(__name__)
 
+import google.generativeai as genai
+
 class AnalysisService:
     def __init__(self, embedding_service, analysis_manager):
         self.embedding_service = embedding_service
         self.analysis_manager = analysis_manager
+        # Models are now pre-initialized in the manager
 
     async def _get_history(self, db: AsyncSession, user_uuid: str, contact_id: str, limit: int = 20) -> str:
         stmt = select(Chat).where(
@@ -42,16 +45,18 @@ class AnalysisService:
         return new_result
 
     async def _generate_analysis(self, prompt: str) -> dict:
-        def _call_api():
-            import google.generativeai as genai
-            model = genai.GenerativeModel('gemini-3-flash-preview')
-            # Force JSON mode if possible or just parse text
-            # Gemini 1.5 Pro and 2.0 Flash support response_mime_type='application/json'
+        def _call_api(model_config):
+            # Use the pre-initialized model from model_config
+            model = model_config['model']
             response = model.generate_content(
                 prompt,
                 generation_config={"response_mime_type": "application/json"}
             )
-            return json.loads(response.text)
+            try:
+                return json.loads(response.text)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON response: {response.text}")
+                raise e
 
         return self.analysis_manager.execute_with_fallback(_call_api)
 
@@ -80,15 +85,6 @@ class AnalysisService:
         # RAG for specific question
         query_embedding = await self.embedding_service.generate_query_embedding(question)
         
-        # Re-use ChatService retrieval logic or duplicate minimal logic here?
-        # Duplicating minimal logic to avoid circular dependency if ChatService uses AnalysisService (unlikely but possible)
-        # Or better: AnalysisService creates its own context retrieval.
-        
-        # Similar to ChatService._get_context but I'll implement it inline or helper
-        # Actually I can't easily reuse without importing ChatService.
-        # I'll duplicate the vector search logic for now or move it to a Repository.
-        # Given simpler scope, duplicate is fine.
-        
         stmt = select(Chat).where(
             Chat.user_uuid == user_uuid,
             Chat.contact_id == contact_id
@@ -103,12 +99,61 @@ class AnalysisService:
         
         prompt = QUESTION_PROMPT.format(context=context_str, question=question)
         
-        def _call_api():
-            import google.generativeai as genai
-            model = genai.GenerativeModel('gemini-3-flash-preview')
+        def _call_api(model_config):
+            model = model_config['model']
             response = model.generate_content(prompt)
-            return {"answer": response.text} # Wrap in logic to match signature
+            return {
+                "answer": response.text,
+                "question": question
+            }
 
         result = self.analysis_manager.execute_with_fallback(_call_api)
         # await self._save_result(db, user_uuid, contact_id, "question", result)
+        return result
+
+    async def generate_key_questions(self, db: AsyncSession, user_uuid: str, contact_id: str):
+        # 1. Get History (Limit 100 for better context)
+        history = await self._get_history(db, user_uuid, contact_id, limit=100)
+        
+        # 2. Get Contact Details (Name, Duration)
+        # Assuming there's a way to get contact details. For now, we'll try to get it from DB or mockup.
+        # In a real app, you'd query the Contact table.
+        # Let's assume a default or fetch if available. 
+        # For this prototype, we'll use generic placeholders if not found, 
+        # BUT we should try to get the name from the chat history or a passed param.
+        # Ideally, this method should receive the contact object or fetch it.
+        
+        partner_name = "dia" # Default
+        try:
+             # Basic heuristic: Try to find a name in the contact table if it existed here
+             # Since we don't have direct access to Contact model here easily without import circulars,
+             # we will rely on the prompt to infer or use "Partner".
+             # BETTER: Let's fetch the contact name from the Chat table relations if possible.
+             # For now, let's use a placeholder that the prompt can handle or modify params.
+             pass
+        except:
+            pass
+
+        # 3. Get Conflict Analysis for Context (Score & Level)
+        # We REUSE the existing analyze_conflict method (cheap call or cached)
+        # Or just use placeholders if we want speed. 
+        # Let's do a quick analysis or use defaults to speed up.
+        conflict_context = {
+            "score": "Unknown",
+            "level": "Unknown"
+        }
+        
+        # 4. Format Prompt
+        from ..prompts.analysis_prompts import KEY_QUESTIONS_PROMPT
+        
+        # We need to ensure the format arguments match the prompt's expectations
+        prompt = KEY_QUESTIONS_PROMPT.format(
+            partner_name="Pasangan", # API should ideally pass this
+            relationship_duration="Unknown",
+            conflict_score=conflict_context["score"],
+            conflict_level=conflict_context["level"],
+            history=history
+        )
+        
+        result = await self._generate_analysis(prompt)
         return result

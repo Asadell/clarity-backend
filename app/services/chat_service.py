@@ -7,10 +7,13 @@ import json
 
 logger = get_logger(__name__)
 
+import google.generativeai as genai
+
 class ChatService:
     def __init__(self, embedding_service, chat_response_manager):
         self.embedding_service = embedding_service
         self.chat_response_manager = chat_response_manager
+        # Models are now pre-initialized in the manager
 
     async def _get_context(self, db: AsyncSession, user_uuid: str, contact_id: str, query_embedding: list[float], limit: int = 5) -> str:
         # Vector search using pgvector
@@ -64,17 +67,9 @@ class ChatService:
         # 4. Generate Response
         prompt = CHAT_SYSTEM_PROMPT.format(context=context_str, message=message)
         
-        def _call_chat_api():
-            # Use the manager's client/key structure.
-            # Assuming models are initialized or we configure inside manager.
-            # SpecializedModelManager executes this function.
-            # We need to access 'genai' inside here, which is imported in manager but we need it here?
-            # No, we need to import genai here too if we use it directly.
-            # OR manager passes the configured client/model?
-            # Our manager implementation configure(api_key=key).
-            # User explicitly requested gemini-3-flash-preview
-            import google.generativeai as genai
-            model = genai.GenerativeModel('gemini-3-flash-preview') 
+        def _call_chat_api(model_config):
+            # Use pre-initialized model from model_config
+            model = model_config['model']
             response = model.generate_content(prompt)
             return response.text
 
