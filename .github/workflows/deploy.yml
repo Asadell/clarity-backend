@@ -21,25 +21,31 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
           script: |
-            # Navigate to the project directory (adjust path as needed)
-            cd /home/${{ secrets.VPS_USERNAME }}/exploraition/project/be
+            # Ensure project directory exists
+            mkdir -p /home/${{ secrets.VPS_USERNAME }}/exploraition/project
+            cd /home/${{ secrets.VPS_USERNAME }}/exploraition/project
             
-            # Pull the latest changes
-            git pull origin prod
+            # Clone repo if it doesn't exist, otherwise pull
+            if [ ! -d "be" ]; then
+              git clone https://github.com/${{ github.repository }}.git be
+              cd be
+              git checkout prod
+            else
+              cd be
+              git pull origin prod
+            fi
             
             # Copy Nginx config
-            # Use sudo if necessary, assuming the user has permissions or we use a separate step to move it
-             # For simplicity in this script context, we'll try to copy. 
-            # Note: Writing to /etc/nginx usually requires root.
-            # We will use a temporary location and then sudo cp
-            cp nginx/becc.rima-app.com.conf /tmp/becc.rima-app.com.conf
-            sudo cp /tmp/becc.rima-app.com.conf /etc/nginx/sites-available/becc.rima-app.com.conf
-            sudo ln -sf /etc/nginx/sites-available/becc.rima-app.com.conf /etc/nginx/sites-enabled/
+            if [ -f "nginx/becc.rima-app.com.conf" ]; then
+              sudo cp nginx/becc.rima-app.com.conf /etc/nginx/sites-available/becc.rima-app.com.conf
+              sudo ln -sf /etc/nginx/sites-available/becc.rima-app.com.conf /etc/nginx/sites-enabled/
+            else
+              echo "Warning: Nginx config not found in repo"
+            fi
             
             # Check for SSL and obtain if missing (non-interactive)
-            # This is a basic check.
             if ! sudo certbot certificates | grep -q "becc.rima-app.com"; then
-                sudo certbot --nginx -d becc.rima-app.com --non-interactive --agree-tos -m admin@rima-app.com --redirect
+                sudo certbot --nginx -d becc.rima-app.com --non-interactive --agree-tos -m admin@rima-app.com --redirect || echo "Certbot failed, please check manually"
             fi
 
             # Rebuild and restart the container
@@ -55,22 +61,27 @@ jobs:
             from psycopg2.extras import execute_values
             
             # Database connection
+            # Use specific container name or service name host if needed, localhost generic fallback
             db_url = os.getenv('DATABASE_URL', 'postgresql://clarity:clarity123@localhost:5433/claritydb')
             
             # Parse connection string
             # Format: postgresql://user:password@host:port/dbname
-            parts = db_url.replace('postgresql://', '').split('@')
-            user_pass = parts[0].split(':')
-            host_port_db = parts[1].split('/')
-            host_port = host_port_db[0].split(':')
-            
-            conn_params = {
-                'user': user_pass[0],
-                'password': user_pass[1],
-                'host': host_port[0],
-                'port': host_port[1] if len(host_port) > 1 else '5432',
-                'dbname': host_port_db[1]
-            }
+            try:
+                parts = db_url.replace('postgresql://', '').split('@')
+                user_pass = parts[0].split(':')
+                host_port_db = parts[1].split('/')
+                host_port = host_port_db[0].split(':')
+                
+                conn_params = {
+                    'user': user_pass[0],
+                    'password': user_pass[1],
+                    'host': host_port[0],
+                    'port': host_port[1] if len(host_port) > 1 else '5432',
+                    'dbname': host_port_db[1]
+                }
+            except Exception as e:
+                print(f"Error parsing DB URL: {e}")
+                sys.exit(1)
             
             try:
                 # Connect to database
@@ -133,6 +144,7 @@ jobs:
             SYNC_SCRIPT
             
             # Install psycopg2 if not present and run sync
+            # Ensure we are in the right directory
             cd /home/${{ secrets.VPS_USERNAME }}/exploraition/project/be
             
             # Copy vector data file if it exists in repo
