@@ -43,7 +43,7 @@ app.add_middleware(
         "https://becc.rima-app.com",
         "https://www.becc.rima-app.com"
     ], 
-    allow_credentials=True,
+    allow_credentials=True, 
     allow_methods=["*"],
     allow_headers=["*"],
 )
