@@ -49,10 +49,10 @@ app.add_middleware(
 )
 
 # Routes
-app.include_router(health.router, prefix="/api/v1")
-app.include_router(user.router, prefix="/api/v1")
-app.include_router(chat.router, prefix="/api/v1")
-app.include_router(analysis.router, prefix="/api/v1")
+app.include_router(health.router)
+app.include_router(user.router)
+app.include_router(chat.router)
+app.include_router(analysis.router)
 
 if __name__ == "__main__":
     import uvicorn
