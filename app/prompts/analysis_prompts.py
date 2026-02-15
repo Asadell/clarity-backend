@@ -148,15 +148,17 @@ Generate exactly 10 questions.
 - "Apakah ada masalah kepercayaan?" (TEXTBOOK)
 
 ### ✅ REQUIRED (Detective/Specific Questions):
-- "Kenapa {partner_name} bilang **'aku capek'** di chat jam 22:00? Apa dia cuma fisik atau capek hati?"
-- "Waktu kamu jawab **'terserah'**, kenapa {partner_name} langsung **read doang**?"
-- "Apa maksud sebenernya dari chat {partner_name} yang bilang **'{quote from chat}'**?"
-- "Kenapa pola chat kalian berubah drastis setelah tanggal {date}?"
+- "Kenapa {partner_name} bilang 'aku capek' di chat jam 22:00? Apa dia cuma fisik atau capek hati?"
+- "Waktu kamu jawab 'terserah', kenapa {partner_name} langsung read doang?"
+- "Apa maksud sebenernya dari chat {partner_name} yang bilang 'kamu beda ya sama yang lain'?"
+- "Kenapa {partner_name} tiba-tiba jadi formal banget pas kamu tanya soal keluarganya?"
 
 ### INSTRUCTIONS:
-1. **Search for Keywords**: Look for "terserrrah", "gausah", "oke", "ywdh", late replies, or sudden topic changes.
-2. **Quote the Chat**: You MUST include short quotes (2-5 words) from the history in your questions.
-3. **Be Provocative**: Ask questions that make the user think "Kok dia tau ya aku mikirin itu?".
+1. **READ THE CHAT HISTORY CAREFULLY**: You have the actual chat messages above. Pick REAL quotes from them.
+2. **Search for Keywords**: Look for "terserah", "gausah", "oke", "ywdh", late replies, or sudden topic changes in the ACTUAL history.
+3. **Quote REAL Messages**: You MUST include short quotes (2-5 words) from the ACTUAL chat history provided above.
+4. **Be Provocative**: Ask questions that make the user think "Kok dia tau ya aku mikirin itu?".
+5. **NO GENERIC QUESTIONS**: If you can't find specific patterns in the history, dig deeper. Every question MUST cite something concrete.
 
 ---
 

@@ -112,32 +112,15 @@ class AnalysisService:
         return result
 
     async def generate_key_questions(self, db: AsyncSession, user_uuid: str, contact_id: str):
-        # 1. Get History (Limit 100 for better context)
-        history = await self._get_history(db, user_uuid, contact_id, limit=100)
+        # 1. Get History (Limit 200 for maximum context - we want REAL quotes)
+        history = await self._get_history(db, user_uuid, contact_id, limit=200)
         
         # 2. Get Contact Details (Name, Duration)
-        # Assuming there's a way to get contact details. For now, we'll try to get it from DB or mockup.
-        # In a real app, you'd query the Contact table.
-        # Let's assume a default or fetch if available. 
-        # For this prototype, we'll use generic placeholders if not found, 
-        # BUT we should try to get the name from the chat history or a passed param.
-        # Ideally, this method should receive the contact object or fetch it.
+        # For now using placeholder. In production, fetch from Contact table.
+        partner_name = "Pasangan"
         
-        partner_name = "dia" # Default
-        try:
-             # Basic heuristic: Try to find a name in the contact table if it existed here
-             # Since we don't have direct access to Contact model here easily without import circulars,
-             # we will rely on the prompt to infer or use "Partner".
-             # BETTER: Let's fetch the contact name from the Chat table relations if possible.
-             # For now, let's use a placeholder that the prompt can handle or modify params.
-             pass
-        except:
-            pass
-
         # 3. Get Conflict Analysis for Context (Score & Level)
-        # We REUSE the existing analyze_conflict method (cheap call or cached)
-        # Or just use placeholders if we want speed. 
-        # Let's do a quick analysis or use defaults to speed up.
+        # Using placeholders for speed. Could call analyze_conflict if needed.
         conflict_context = {
             "score": "Unknown",
             "level": "Unknown"
@@ -148,7 +131,7 @@ class AnalysisService:
         
         # We need to ensure the format arguments match the prompt's expectations
         prompt = KEY_QUESTIONS_PROMPT.format(
-            partner_name="Pasangan", # API should ideally pass this
+            partner_name=partner_name,
             relationship_duration="Unknown",
             conflict_score=conflict_context["score"],
             conflict_level=conflict_context["level"],
