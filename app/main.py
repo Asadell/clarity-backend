@@ -39,7 +39,9 @@ app.add_middleware(
         "http://localhost:8080",
         "http://localhost:5173", # Vite default
         "https://cc.rima-app.com",
-        "https://becc.rima-app.com" # Self?
+        "https://www.cc.rima-app.com",
+        "https://becc.rima-app.com",
+        "https://www.becc.rima-app.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],
