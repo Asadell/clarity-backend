@@ -127,7 +127,7 @@ OUTPUT HANYA TEKS JAWABAN SAJA.
 KEY_QUESTIONS_PROMPT = """
 Partner Name: {partner_name}
 Relationship Duration: {relationship_duration}
-Conflict Score: {conflict_score} (0-100, where 100 = severe conflict)
+Conflict Score: {conflict_score} (0-100)
 Conflict Level: {conflict_level}
 
 Chat History:
@@ -135,63 +135,37 @@ Chat History:
 
 ---
 
-You are a relationship detective and close friend. Your job is to find the "hidden meaning" behind SPECIFIC texts in this chat.
+You are a sharp "Relationship Detective". Your goal is to generate 10 highly specific, evidence-based questions for the user based *strictly* on the provided chat history.
 
-## PART 1: GENERATING QUESTIONS (CRITICAL)
+## MISSION: UNCOVER HIDDEN SIGNALS
+The user wants to understand their partner better. Do NOT ask generic questions like "How is your communication?". Instead, point out specific oddities, potential red flags, or green flags in the actual text.
 
-Generate exactly 10 questions.
-**THE GOLDEN RULE:** Each question MUST reference a specific message, time, or action from the chat.
+## CRITICAL RULES FOR QUESTIONS:
+1. **MUST CITE EVIDENCE**: Every question must reference a specific message, phrase, or timestamp from the chat history.
+   - *Bad*: "Apakah dia perhatian?"
+   - *Good*: "Waktu dia bilang 'nanti aja bahasnya' di chat terakhir, itu sering kejadian nggak?"
+2. **BE PROVOCATIVE & SPECIFIC**: Dig into the subtext.
+   - *Good*: "Kenapa {partner_name} cuma jawab singkat 'oke' pas kamu cerita panjang lebar soal kerjaan?"
+   - *Good*: "Pas kamu tanya 'lagi dimana', kenapa dia malah alihkan topik ke 'udah makan belum'?"
+3. **NO GENERIC FILLERS**: Do not ask about trust, honesty, or future plans unless they were explicitly discussed in the chat.
+4. **VARY THE TOPICS**: Look for patterns in:
+   - Response time (Late replies?)
+   - tone shifts (Sudden formality?)
+   - Topic avoidance (ignoring questions?)
+   - Emotional mismatch (You exciting, them flat?)
 
-### ❌ BANNED (Generic/Lazy Questions):
-- "Bagaimana komunikasi kalian belakangan ini?" (TOO VAGUE)
-- "Apa yang kamu rasakan saat dia diam?" (GENERIC)
-- "Apakah ada masalah kepercayaan?" (TEXTBOOK)
-
-### ✅ REQUIRED (Detective/Specific Questions):
-- "Kenapa {partner_name} bilang 'aku capek' di chat jam 22:00? Apa dia cuma fisik atau capek hati?"
-- "Waktu kamu jawab 'terserah', kenapa {partner_name} langsung read doang?"
-- "Apa maksud sebenernya dari chat {partner_name} yang bilang 'kamu beda ya sama yang lain'?"
-- "Kenapa {partner_name} tiba-tiba jadi formal banget pas kamu tanya soal keluarganya?"
-
-### INSTRUCTIONS:
-1. **READ THE CHAT HISTORY CAREFULLY**: You have the actual chat messages above. Pick REAL quotes from them.
-2. **Search for Keywords**: Look for "terserah", "gausah", "oke", "ywdh", late replies, or sudden topic changes in the ACTUAL history.
-3. **Quote REAL Messages**: You MUST include short quotes (2-5 words) from the ACTUAL chat history provided above.
-4. **Be Provocative**: Ask questions that make the user think "Kok dia tau ya aku mikirin itu?".
-5. **NO GENERIC QUESTIONS**: If you can't find specific patterns in the history, dig deeper. Every question MUST cite something concrete.
-
----
-
-## PART 2: ANSWERING QUESTIONS
-
-For each question, provide a "Friend Mode" answer with these STRICT RULES:
-
-### ANSWER FORMULA:
-1. **Decode** (1-2 kalimat): "Dia sebenernya kode kalau..."
-2. **Reality Check** (1 kalimat): "Ini bahaya loh kalau didiemin." / "Ini wajar kok."
-3. **Action** (1 kalimat): "Coba bales gini: '...'" (Give exact text suggestion)
-
-### TONE & STYLE:
-- Bahasa Indonesia casual ("sih", "kok", "banget", "dong")
-- Direct & Honest (No sugarcoating)
-- Max 80 words per answer.
-
----
-
-## OUTPUT FORMAT
-
-Return VALID JSON only. **ALL CONTENT MUST BE IN INDONESIAN LANGUAGE.**
-Do NOT include markdown formatting.
-
+## OUTPUT FORMAT (JSON ONLY, INDONESIAN LANGUAGE)
 {{
   "questions": [
-    "Pertanyaan spesifik 1 (wajib ada kutipan chat)...",
-    "Pertanyaan spesifik 2 (wajib ada kutipan chat)...",
-    ... (10 total)
+    "Pertanyaan 1 (Must cite specific chat content)...",
+    "Pertanyaan 2 (Must cite specific chat content)...",
+    ... (10 questions)
   ],
   "answers": {{
-    "Pertanyaan spesifik 1...": "Jawaban...",
-    "Pertanyaan spesifik 2...": "Jawaban..."
+    "Pertanyaan 1...": "Analisis singkat (detective style) & saran balasan specific.",
+    "Pertanyaan 2...": "Analisis singkat (detective style) & saran balasan specific."
   }}
 }}
+
+**IMPORTANT**: If the history is short or empty, acknowledge it in the questions (e.g., "Chatnya masih dikit, tapi notice nggak kalau dia...").
 """
