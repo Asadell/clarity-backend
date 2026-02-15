@@ -1,0 +1,150 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - prod
+    paths:
+      - 'be/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            # Navigate to the project directory (adjust path as needed)
+            cd /home/${{ secrets.VPS_USERNAME }}/exploraition/project/be
+            
+            # Pull the latest changes
+            git pull origin prod
+            
+            # Copy Nginx config
+            # Use sudo if necessary, assuming the user has permissions or we use a separate step to move it
+             # For simplicity in this script context, we'll try to copy. 
+            # Note: Writing to /etc/nginx usually requires root.
+            # We will use a temporary location and then sudo cp
+            cp nginx/becc.rima-app.com.conf /tmp/becc.rima-app.com.conf
+            sudo cp /tmp/becc.rima-app.com.conf /etc/nginx/sites-available/becc.rima-app.com.conf
+            sudo ln -sf /etc/nginx/sites-available/becc.rima-app.com.conf /etc/nginx/sites-enabled/
+            
+            # Check for SSL and obtain if missing (non-interactive)
+            # This is a basic check.
+            if ! sudo certbot certificates | grep -q "becc.rima-app.com"; then
+                sudo certbot --nginx -d becc.rima-app.com --non-interactive --agree-tos -m admin@rima-app.com --redirect
+            fi
+
+            # Rebuild and restart the container
+            docker compose up -d --build
+            
+            # Sync vector data (check if exists first to prevent duplicates)
+            # Copy vector data sync script
+            cat > /tmp/sync_vector_data.py << 'SYNC_SCRIPT'
+            import json
+            import os
+            import sys
+            import psycopg2
+            from psycopg2.extras import execute_values
+            
+            # Database connection
+            db_url = os.getenv('DATABASE_URL', 'postgresql://clarity:clarity123@localhost:5433/claritydb')
+            
+            # Parse connection string
+            # Format: postgresql://user:password@host:port/dbname
+            parts = db_url.replace('postgresql://', '').split('@')
+            user_pass = parts[0].split(':')
+            host_port_db = parts[1].split('/')
+            host_port = host_port_db[0].split(':')
+            
+            conn_params = {
+                'user': user_pass[0],
+                'password': user_pass[1],
+                'host': host_port[0],
+                'port': host_port[1] if len(host_port) > 1 else '5432',
+                'dbname': host_port_db[1]
+            }
+            
+            try:
+                # Connect to database
+                conn = psycopg2.connect(**conn_params)
+                cur = conn.cursor()
+                
+                # Check if vector data already exists
+                cur.execute("SELECT COUNT(*) FROM messages WHERE embedding IS NOT NULL")
+                existing_count = cur.fetchone()[0]
+                
+                if existing_count > 0:
+                    print(f"✓ Vector data already exists ({existing_count} messages with embeddings). Skipping sync.")
+                    sys.exit(0)
+                
+                # Load vector data
+                vector_data_path = '/tmp/vectorized_chats.json'
+                if not os.path.exists(vector_data_path):
+                    print("✗ Vector data file not found. Skipping sync.")
+                    sys.exit(0)
+                
+                with open(vector_data_path, 'r') as f:
+                    data = json.load(f)
+                
+                chats = data.get('chats', [])
+                if not chats:
+                    print("✗ No chat data found. Skipping sync.")
+                    sys.exit(0)
+                
+                # Insert data
+                insert_query = """
+                    INSERT INTO messages (contact_id, message, sender, timestamp, embedding)
+                    VALUES %s
+                    ON CONFLICT DO NOTHING
+                """
+                
+                values = [
+                    (
+                        chat['contactId'],
+                        chat['message'],
+                        chat['sender'],
+                        chat['timestamp'],
+                        chat['embedding']
+                    )
+                    for chat in chats
+                ]
+                
+                execute_values(cur, insert_query, values)
+                conn.commit()
+                
+                print(f"✓ Successfully synced {len(chats)} messages with vector embeddings")
+                
+            except Exception as e:
+                print(f"✗ Error syncing vector data: {e}")
+                sys.exit(1)
+            finally:
+                if 'cur' in locals():
+                    cur.close()
+                if 'conn' in locals():
+                    conn.close()
+            SYNC_SCRIPT
+            
+            # Install psycopg2 if not present and run sync
+            cd /home/${{ secrets.VPS_USERNAME }}/exploraition/project/be
+            
+            # Copy vector data file if it exists in repo
+            if [ -f "../vector-local/data/vectorized_chats.json" ]; then
+                cp ../vector-local/data/vectorized_chats.json /tmp/vectorized_chats.json
+                
+                # Run sync script with docker compose environment
+                docker compose exec -T app python /tmp/sync_vector_data.py || echo "Vector sync skipped or failed (non-critical)"
+            else
+                echo "✓ No vector data file found, skipping sync"
+            fi
+            
+            # Reload Nginx
+            sudo nginx -t && sudo systemctl reload nginx
