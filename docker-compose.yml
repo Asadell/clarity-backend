@@ -25,7 +25,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://clarity:clarity123@db:5432/claritydb
+      DATABASE_URL: ${DATABASE_URL}
       # Pass through all API keys from host .env
       GEMINI_API_KEY_1: ${GEMINI_API_KEY_1}
       GEMINI_API_KEY_2: ${GEMINI_API_KEY_2}
